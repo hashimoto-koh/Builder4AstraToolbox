@@ -72,12 +72,12 @@ With all major architectures included, the resulting `libastra.so` footprint is 
    - Pinned Commit: `bd0323e9b4b243ee90bca41341927b05e6e816c8`
    - Downloaded dynamically via BinaryBuilder `GitSource` without vendoring upstream trees into Git.
 2. **Wrapper Sources**:
-   - `wrapper/include/astra/julia_c_api.h`
-   - `wrapper/src/julia_c_api.cpp`
+   - `bundled/wrapper/include/astra/julia_c_api.h`
+   - `bundled/wrapper/src/julia_c_api.cpp`
    - Maintained within this repository to serve as the build input for the Yggdrasil recipe.
 3. **Upstream Unified Diff Patches**:
-   - `patches/0001-fix-darthelper-typo.patch`: Corrects index reference typo (`o3+1` -> `o2+1`) in `cuda/2d/darthelper.cu`.
-   - `patches/0002-add-julia-c-api-to-makefile.patch`: Adds `src/julia_c_api.lo` to `build/linux/Makefile.in`.
+   - `bundled/patches/0001-fix-darthelper-typo.patch`: Corrects index reference typo (`o3+1` -> `o2+1`) in `cuda/2d/darthelper.cu`.
+   - `bundled/patches/0002-add-julia-c-api-to-makefile.patch`: Adds `src/julia_c_api.lo` to `build/linux/Makefile.in`.
 
 ---
 

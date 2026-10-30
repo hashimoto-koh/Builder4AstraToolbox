@@ -38,11 +38,11 @@ When using the ASTRA Toolbox in scientific publications, please cite the followi
 
 - **Copyright**: Copyright (c) 2026, AstraToolbox contributors
 - **License**: GNU General Public License v3.0 or later (GPL-3.0-or-later)
-- **Source**: `wrapper/include/astra/julia_c_api.h` and `wrapper/src/julia_c_api.cpp`
+- **Source**: `bundled/wrapper/include/astra/julia_c_api.h` and `bundled/wrapper/src/julia_c_api.cpp`
 - **Modifications to Upstream**:
   - Julia C ABI functions (`astra_julia_*`) added to provide a lightweight zero-copy interface for `AstraToolbox.jl`.
-  - Fix for 4-connected mask index typo in `cuda/2d/darthelper.cu` (`patches/0001-fix-darthelper-typo.patch`).
-  - Inclusion of `julia_c_api.lo` in `build/linux/Makefile.in` (`patches/0002-add-julia-c-api-to-makefile.patch`).
+  - Fix for 4-connected mask index typo in `cuda/2d/darthelper.cu` (`bundled/patches/0001-fix-darthelper-typo.patch`).
+  - Inclusion of `julia_c_api.lo` in `build/linux/Makefile.in` (`bundled/patches/0002-add-julia-c-api-to-makefile.patch`).
 
 ---
 
