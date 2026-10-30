@@ -97,3 +97,33 @@ Phase 3 および Phase 4 において、以下の受入基準を満たすこと
    - 固定されたテスト入力データを用い、旧ローカルビルド（`AstraToolbox.jl/deps/usr/lib/libastra.so`）と新 JLL ビルドの出力を直接比較。
    - CPU 演算（Parallel / FanFlat FP, BP, FBP, SIRT）: 相対誤差 $< 10^{-6}$
    - CUDA 演算（2D/3D Parallel / FanFlat / Cone FP, BP, FDK, SIRT, CGLS）: 相対誤差 $< 10^{-5}$ (GPU 非決定性および浮動小数点丸め誤差の許容範囲内)
+
+---
+
+## 6. 実機受入検証結果 (Phase 3 実行ログ)
+
+- **検証日時**: 2026-10-30
+- **実行環境**: NVIDIA GeForce RTX 3090, Driver 570.211.01, CUDA 12.8, Julia 1.11.9
+- **検証スクリプト**: `scripts/inspect_abi.sh`, `scripts/test_products.jl`, `test/runtests.jl`
+
+### 6.1 ABI & 動的依存検査結果 (`scripts/inspect_abi.sh`)
+- `NEEDED`: `libcudart.so.12`, `libcufft.so.11`, `libstdc++.so.6`, `libm.so.6`, `libc.so.6`, `ld-linux-x86-64.so.2`, `libgcc_s.so.1` (合格)
+- `SONAME`: `libastra.so.0` (合格)
+- `Exported Symbol Count`: 114 / 114 (全シンボル完全一致、合格)
+- `Wrapper Source Consistency`: `wrapper/` と `AstraToolbox.jl/deps/wrapper/` の完全一致（合格）
+
+### 6.2 C ABI 診断・CPU/CUDA 数値検証 (`scripts/test_products.jl`)
+- `astra_julia_has_cuda`: 1 (True)
+- `astra_julia_get_gpu_count`: 1 (True)
+- 2D Parallel FP (CPU vs CUDA):
+  - CPU 出力: `Float32[3.0 6.0; 7.0 4.0]`
+  - CUDA 出力: `Float32[3.0 6.0; 7.0 4.0]`
+  - 最大絶対差: `0.0` (完全一致、合格)
+- 2D Parallel BP (CPU vs CUDA):
+  - CPU 出力: `Float32[7.0 9.0; 11.0 13.0]`
+  - CUDA 出力: `Float32[7.0 9.0; 11.0 13.0]`
+  - 最大絶対差: `0.0` (完全一致、合格)
+
+### 6.3 テストスイート結果 (`test/runtests.jl`)
+- 15 / 15 テスト全件 PASS (所要時間: 2.0s)
+
