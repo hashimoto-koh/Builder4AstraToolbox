@@ -40,28 +40,44 @@ Builder4AstraToolbox/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml             # GitHub Actions CI for recipe validation
+├── bundled/                   # Yggdrasil-compliant bundled source tree (DirectorySource)
+│   ├── COPYING                # Wrapper GPL-3.0 license
+│   ├── patches/               # Upstream build patches
+│   │   ├── 0001-fix-darthelper-typo.patch
+│   │   └── 0002-add-julia-c-api-to-makefile.patch
+│   └── wrapper/               # Julia C ABI bridge source files
+│       ├── include/astra/
+│       │   └── julia_c_api.h
+│       └── src/
+│           └── julia_c_api.cpp
 ├── docs/                      # Technical specifications and design documents
 │   ├── inventory.md           # Audit of existing build, source refs, and APIs
 │   ├── abi-contract.md        # C ABI contract and full 114 exported symbol catalog
 │   ├── dependency-matrix.md   # Dynamic link dependencies and toolchain matrix
 │   ├── build-validation.md    # Build validation specs and hardware acceptance test log
+│   ├── release-process.md     # Yggdrasil release workflow and ABI versioning
 │   └── integration-guide.md   # AstraToolbox.jl integration and PR migration plan
-├── patches/                   # Upstream unified diff patches
-│   ├── 0001-fix-darthelper-typo.patch
-│   ├── 0002-add-julia-c-api-to-makefile.patch
-│   └── README.md              # Patch documentation and origins
+├── patches/                   # Repository-level integration patches
+│   ├── README.md              # Patch documentation and instructions
+│   └── astra_toolbox_jl_integration.patch  # Standalone patch for AstraToolbox.jl
 ├── platforms/
 │   └── cuda.jl                # Official Yggdrasil CUDA platform helper
+├── products/                  # Built BinaryBuilder artifacts (.tar.gz and extracted)
+│   ├── AstraToolbox.v2.4.0.x86_64-linux-gnu-cuda+12.4.tar.gz
+│   └── extracted/             # Extracted library for immediate test suite execution
 ├── scripts/
 │   ├── inspect_abi.sh         # Dynamic section (NEEDED) and 114 symbol audit script
 │   └── test_products.jl       # Direct C ABI verification (CPU vs CUDA numerical equivalence)
+├── sources/                   # Source integrity verification
+│   ├── manifest.toml          # Pinning cryptographic SHA256 checksums
+│   └── verify_sources.jl      # Automated SHA256 verification script
 ├── test/
 │   └── runtests.jl            # Master automated verification test suite
-├── wrapper/                   # Julia C ABI bridge sources
-│   ├── include/astra/
-│   │   └── julia_c_api.h      # C ABI header declarations
-│   └── src/
-│       └── julia_c_api.cpp    # C ABI implementation (borrowed buffer zero-copy bridge)
+├── yggdrasil/                 # Yggdrasil submission staging directory
+│   ├── README.md              # Yggdrasil PR submission guide
+│   └── A/AstraToolbox/        # Exact tree ready for Yggdrasil PR
+│       ├── build_tarballs.jl
+│       └── bundled/
 ├── build_tarballs.jl          # BinaryBuilder.jl build recipe
 ├── LICENSE                    # GNU General Public License v3.0 (GPL-3.0-or-later)
 ├── Project.toml               # Project dependencies (BinaryBuilder v0.6+)

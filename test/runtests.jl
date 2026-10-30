@@ -1,10 +1,19 @@
 using Test
 using Libdl
 
-const DEFAULT_LIB = "/home/jov/git/prj/AstraToolbox.jl/deps/usr/lib/libastra.so"
+const ARTIFACT_LIB = normpath(joinpath(@__DIR__, "..", "products", "extracted", "lib", "libastra.so"))
+const FALLBACK_LIB = "/home/jov/git/prj/AstraToolbox.jl/deps/usr/lib/libastra.so"
+const DEFAULT_LIB = isfile(ARTIFACT_LIB) ? ARTIFACT_LIB : FALLBACK_LIB
 const libpath = get(ENV, "ASTRA_JULIA_LIB", DEFAULT_LIB)
 
 @testset "Builder4AstraToolbox Test Suite" begin
+
+    @testset "Source Verification Manifest" begin
+        verify_script = joinpath(@__DIR__, "..", "sources", "verify_sources.jl")
+        @test isfile(verify_script)
+        cmd = `julia --startup-file=no --project=$(joinpath(@__DIR__, "..")) $verify_script`
+        @test success(cmd)
+    end
 
     @testset "ABI and Symbol Inspection" begin
         @test isfile(libpath)
@@ -38,7 +47,7 @@ const libpath = get(ENV, "ASTRA_JULIA_LIB", DEFAULT_LIB)
     end
 
     @testset "Wrapper Files Consistency" begin
-        wrapper_dir = normpath(joinpath(@__DIR__, "..", "wrapper"))
+        wrapper_dir = normpath(joinpath(@__DIR__, "..", "bundled", "wrapper"))
         astra_wrapper = "/home/jov/git/prj/AstraToolbox.jl/deps/wrapper"
         if isdir(astra_wrapper)
             h1 = read(joinpath(wrapper_dir, "include", "astra", "julia_c_api.h"), String)

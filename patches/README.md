@@ -1,21 +1,18 @@
-# Upstream Unified Diff Patches (patches/README.md)
+# Patches Directory (`patches/`)
 
-This directory contains unified diff patches applied against the upstream ASTRA Toolbox repository (commit: `bd0323e9b4b243ee90bca41341927b05e6e816c8`).
+This directory contains repository-level integration patches and references.
 
----
+## Contents
 
-## 1. `0001-fix-darthelper-typo.patch`
-- **Target File**: `cuda/2d/darthelper.cu`
-- **Purpose**: Corrects an array index reference typo in the 4-connected mask kernel.
-- **Background**:
-  The original code referenced `d[o3 + 1]` in the 4-connected evaluation branch. However, scanning the right-hand neighboring pixel requires `o2 + 1`, not `o3 + 1`.
-- **Origin**: Extracted from `AstraToolbox.jl/deps/build.jl` (`patch_upstream_sources()`).
+- `astra_toolbox_jl_integration.patch`:
+  Standalone unified diff patch for integrating the official `AstraToolbox_jll` package into [AstraToolbox.jl](https://github.com/hashimoto-koh/AstraToolbox.jl).
+  It updates `Project.toml` and `src/lowlevel_common.jl` while maintaining 100% backward compatibility and falling back to local source builds (`deps/build.jl`).
 
----
+## Build Patches for Upstream ASTRA
 
-## 2. `0002-add-julia-c-api-to-makefile.patch`
-- **Target File**: `build/linux/Makefile.in`
-- **Purpose**: Appends `src/julia_c_api.lo` to `BASE_OBJECTS` for building `libastra.la`.
-- **Background**:
-  Enables the Autotools build system to compile the Julia C ABI wrapper implementation (`src/julia_c_api.cpp`) and bundle it directly into `libastra.so`.
-- **Origin**: Extracted from `AstraToolbox.jl/deps/build.jl` (`patch_makefile()`).
+In accordance with Yggdrasil's `DirectorySource("./bundled")` packaging convention, all build-time patches applied to upstream ASTRA Toolbox are maintained inside `bundled/patches/`:
+
+- `bundled/patches/0001-fix-darthelper-typo.patch`:
+  Fixes a typo in `cuda/2d/darthelper.cu` (`d[o3 + 1]` -> `d[o2 + 1]`) matching the 4-connected mask condition.
+- `bundled/patches/0002-add-julia-c-api-to-makefile.patch`:
+  Adds `src/julia_c_api.lo` to `build/linux/Makefile.in` to compile the Julia C ABI bridge directly into `libastra.so`.
