@@ -1,0 +1,24 @@
+# Ignore files generated automatically
+__pycache__/
+.ipynb_checkpoints/
+
+# Default Julia ignores
+/Manifest.toml
+/docs/Manifest.toml
+
+# BinaryBuilder artifacts and build directories
+/products/
+/build/
+*.tar.gz
+*.tar
+*.sha256
+/AstraToolbox_jll/
+/.BinaryBuilder/
+*.log
+
+# Local development files
+/PROMPT.md
+/private/
+/.codex/
+/.vscode/
+
