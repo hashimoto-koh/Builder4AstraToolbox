@@ -1,72 +1,118 @@
 # Builder4AstraToolbox
 
-BinaryBuilder.jl build recipe repository for **ASTRA Toolbox** and Julia C ABI bridge, intended for distribution as `AstraToolbox_jll` and eventual inclusion in [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil).
+`Builder4AstraToolbox` manages the build recipes, patches, Julia C ABI wrapper, and verification assets for building the native C++/CUDA backend shared library (`libastra`) of [AstraToolbox.jl](https://github.com/hashimoto-koh/AstraToolbox.jl) using [BinaryBuilder.jl](https://github.com/JuliaPackaging/BinaryBuilder.jl), ultimately packaging and distributing it as the official JLL package `AstraToolbox_jll` on [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil).
+
+This project is an unofficial packaging pipeline for [AstraToolbox.jl](https://github.com/hashimoto-koh/AstraToolbox.jl), interfacing with the high-performance C++/CUDA reconstruction engines of the upstream [ASTRA Toolbox](https://github.com/astra-toolbox/astra-toolbox).
+
+> [!NOTE]
+> This project is **not** affiliated with, endorsed by, or maintained by imec-Vision Lab, the University of Antwerp, CWI (Centrum Wiskunde & Informatica), or the upstream ASTRA Toolbox contributors.
+>
+> The foundational ASTRA Toolbox tomographic reconstruction architecture and GPU algorithms were developed by imec-Vision Lab (University of Antwerp) and CWI (Amsterdam), and are distributed under the GNU General Public License v3.0 or later (GPL-3.0-or-later). We express our deep respect and sincere gratitude to the original authors, maintainers, and contributors for creating and sustaining ASTRA Toolbox as an outstanding open-source tomographic reconstruction platform.
 
 ---
 
-## 1. 概要 (Overview)
+## Purpose
 
-本リポジトリは、[hashimoto-koh/AstraToolbox.jl](https://github.com/hashimoto-koh/AstraToolbox.jl) が利用する native ASTRA C++/CUDA backend および Julia 用 C ABI bridge を、[BinaryBuilder.jl](https://github.com/JuliaPackaging/BinaryBuilder.jl) で再現可能にビルドし、Yggdrasil 登録と JLL (`AstraToolbox_jll`) 配布を行うための **build recipe 開発リポジトリ** です。
+Previously, using `AstraToolbox.jl` required compiling the native ASTRA backend locally via `deps/build.jl`, necessitating a local CUDA development toolkit, `nvcc` compiler, and GNU Autotools on the user's host machine.
 
-- **目標 JLL 名**: `AstraToolbox_jll`
-- **対象プラットフォーム**: **Linux x86_64 / NVIDIA GPU (CUDA 12 系)**
-- **方針**: **CUDA-enabled 単一 JLL のみを配布**。同一の `libastra.so` 内に CPU 2D アルゴリズムと CUDA 2D/3D アルゴリズムをすべて内包し、Julia 側から `backend=cpu()` と `backend=cuda()` の両方をシームレスに利用できます。GPU を搭載しない環境での実行・配布はサポート対象外です。
+The goal of this repository is to build reproducible, relocatable binaries for `libastra` and submit the build recipe to the official Julia community build tree [Yggdrasil](https://github.com/JuliaPackaging/Yggdrasil). This enables distributing precompiled binaries as `AstraToolbox_jll`, allowing Julia users to run both CPU and GPU tomographic reconstruction algorithms seamlessly with only an appropriate NVIDIA driver installed—without requiring a local CUDA development toolkit, host compiler, or build tools.
+
+> [!NOTE]
+> **Naming Distinctions**:
+> - `Builder4AstraToolbox`: This repository (manages build recipes, patches, wrapper shims, verification test suites, and migration specifications).
+> - `AstraToolbox_jll`: The auto-generated Julia binary wrapper package created and published by BinaryBuilder / Yggdrasil.
+> - `AstraToolbox.jl`: The high-level Julia tomographic reconstruction package providing public APIs, type systems, and user interfaces.
 
 ---
 
-## 2. ディレクトリ構成 (Repository Layout)
+## Architectural Principle: Single CUDA-Enabled JLL
+
+- **Distribution Target**: Only **CUDA-enabled JLL artifacts on Linux x86_64** are built and distributed. CPU-only JLL variants or CPU-only artifacts are not created.
+- **Full CPU Algorithm Preservation**: ASTRA's CPU 2D algorithms (Parallel/FanFlat FP/BP, FBP, SIRT, SART, CGLS, ART, SparseMatrix) are fully built and embedded inside the CUDA-enabled `libastra.so`. Julia callers can select either `backend=cpu()` or `backend=cuda()` from the exact same library.
+- **Hardware Requirement**: Execution on hosts without an NVIDIA GPU or driver is unsupported.
+
+---
+
+## Repository Layout
 
 ```text
 Builder4AstraToolbox/
-  AGENTS.md                     # 開発規約・ローカル記録ルール
-  PLAN.md                       # マイルストーン開発計画
-  README.md                     # 本ドキュメント
-  LICENSE                       # GPL-3.0-or-later
-  THIRD_PARTY_NOTICES.md        # upstream ASTRA / CWI / imec 著作権・論文引用
-  build_tarballs.jl             # BinaryBuilder ビルドレシピ
-  platforms/
-    cuda.jl                     # Yggdrasil 公式 CUDA プラットフォームヘルパー
-  patches/
-    0001-fix-darthelper-typo.patch
-    0002-add-julia-c-api-to-makefile.patch
-    README.md
-  wrapper/
-    include/astra/julia_c_api.h # Julia C ABI 定義
-    src/julia_c_api.cpp         # Julia C ABI 実装
-  scripts/
-    inspect_abi.sh              # ELF 動的依存および 114 個の export シンボル検査
-    test_products.jl            # C ABI 直接呼び出しによる診断・CPU/CUDA 数値検証
-  test/
-    runtests.jl                 # 自動テストスイート
-  docs/
-    inventory.md                # 現行実装の棚卸しとリビジョン固定
-    abi-contract.md             # Julia C ABI 契約書（全 114 シンボル仕様）
-    dependency-matrix.md        # 依存関係マトリクス
-    build-validation.md         # ビルド・検証仕様書および実機受入ログ
-    integration-guide.md        # AstraToolbox.jl 統合・移行手順書
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # GitHub Actions CI for recipe validation
+├── docs/                      # Technical specifications and design documents
+│   ├── inventory.md           # Audit of existing build, source refs, and APIs
+│   ├── abi-contract.md        # C ABI contract and full 114 exported symbol catalog
+│   ├── dependency-matrix.md   # Dynamic link dependencies and toolchain matrix
+│   ├── build-validation.md    # Build validation specs and hardware acceptance test log
+│   └── integration-guide.md   # AstraToolbox.jl integration and PR migration plan
+├── patches/                   # Upstream unified diff patches
+│   ├── 0001-fix-darthelper-typo.patch
+│   ├── 0002-add-julia-c-api-to-makefile.patch
+│   └── README.md              # Patch documentation and origins
+├── platforms/
+│   └── cuda.jl                # Official Yggdrasil CUDA platform helper
+├── scripts/
+│   ├── inspect_abi.sh         # Dynamic section (NEEDED) and 114 symbol audit script
+│   └── test_products.jl       # Direct C ABI verification (CPU vs CUDA numerical equivalence)
+├── test/
+│   └── runtests.jl            # Master automated verification test suite
+├── wrapper/                   # Julia C ABI bridge sources
+│   ├── include/astra/
+│   │   └── julia_c_api.h      # C ABI header declarations
+│   └── src/
+│       └── julia_c_api.cpp    # C ABI implementation (borrowed buffer zero-copy bridge)
+├── build_tarballs.jl          # BinaryBuilder.jl build recipe
+├── LICENSE                    # GNU General Public License v3.0 (GPL-3.0-or-later)
+├── Project.toml               # Project dependencies (BinaryBuilder v0.6+)
+├── README.md                  # Master documentation
+└── THIRD_PARTY_NOTICES.md     # Upstream notices, attributions, and academic citations
 ```
 
 ---
 
-## 3. テストの実行方法 (Verification)
+## Testing & Verification
 
-本リポジトリ単体で、C ABI の整合性および実機 GPU での動作検証を実行できます:
+Run the full automated test suite on an NVIDIA GPU host:
 
 ```bash
-# 全テストスイートの実行
+# Run all automated tests (ABI inspection, symbol audit, direct C ABI numerical equivalence)
 julia --startup-file=no --project=. test/runtests.jl
 
-# ABI および export シンボルの静的検査
+# Inspect shared library NEEDED, SONAME, and all 114 exported symbols
 ./scripts/inspect_abi.sh
 
-# C ABI 経由の直接数値テスト (CPU vs CUDA)
+# Run direct C ABI CPU vs CUDA numerical equivalence test
 julia --startup-file=no --project=. scripts/test_products.jl
 ```
 
 ---
 
-## 4. ライセンス・免責事項 (License & Attribution)
+## CUDA Support and Hardware Compatibility Matrix
 
-- **ライセンス**: 本リポジトリおよび生成物は [GNU General Public License v3.0 or later (GPL-3.0-or-later)](LICENSE) の下で配布されます。
-- **Upstream ASTRA Toolbox**: Copyright (c) 2010–2024, imec Vision Lab, University of Antwerp & CWI, Amsterdam.
-- **非公式明記**: 本リポジトリは非公式の Julia コミュニティパッケージングプロジェクトであり、公式 ASTRA Toolbox チームによる支援・公認を示唆するものではありません。学術利用の際は [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に記載の原著論文を引用してください。
+`libastra.so` dynamically links only against `libcudart.so` and `libcufft.so` (provided by `CUDA_Runtime_jll`). The CUDA Driver library (`libcuda.so`) is supplied by the host system at runtime.
+
+### Supported Architectures (SASS + PTX)
+| Architecture | Compute Capability | Target GPUs | Generation Mode |
+|---|---|---|---|
+| Maxwell | `sm_50` | GTX 750, GTX 9xx | SASS |
+| Pascal | `sm_60` | GP100, P100 | SASS |
+| Volta | `sm_70` | Titan V, V100 | SASS |
+| Turing | `sm_75` | RTX 2080, T4 | SASS |
+| Ampere | `sm_80` | A100 | SASS |
+| Ampere | `sm_86` | RTX 3090 (Primary test hardware), RTX 3080 | SASS |
+| Ada Lovelace | `sm_89` | RTX 4090, RTX 4080, L40 | SASS |
+| Hopper | `sm_90` | H100 | SASS |
+| Forward Compatibility | `compute_90` | Future GPU architectures | PTX JIT compilation |
+
+- **Host Driver Requirement**: NVIDIA Linux display driver >= 525.60.13 (CUDA 12.x compatible).
+- **Host Compiler Requirement**: None. No local `nvcc` or CUDA Toolkit is required to run `AstraToolbox.jl` with `AstraToolbox_jll`.
+
+---
+
+## License & Academic Attribution
+
+- **License**: Distributed under the [GNU General Public License v3.0 or later (GPL-3.0-or-later)](LICENSE).
+- **Attribution**: When using ASTRA Toolbox or `AstraToolbox.jl` in scientific research, please cite the foundational publications:
+  1. W. van Aarle et al., *"Fast and Flexible X-ray Tomography Using the ASTRA Toolbox"*, **Optics Express**, 24(22), 25129–25147, 2016. [DOI: 10.1364/OE.24.025129](https://doi.org/10.1364/OE.24.025129)
+  2. W. van Aarle et al., *"The ASTRA Toolbox: A platform for advanced algorithm development in electron tomography"*, **Ultramicroscopy**, 157, 35–47, 2015. [DOI: 10.1016/j.ultramic.2015.05.002](https://doi.org/10.1016/j.ultramic.2015.05.002)

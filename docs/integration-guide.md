@@ -1,34 +1,34 @@
-# AstraToolbox.jl 統合・移行ガイド (integration-guide.md)
+# AstraToolbox.jl Integration & Migration Guide (integration-guide.md)
 
-本書は `AstraToolbox_jll` を `AstraToolbox.jl` へ統合するためのローダー変更案、PR 差分設計、互換性検証手順をまとめたガイドである。
-※ 注意: `/home/jov/git/prj/AstraToolbox.jl` は参照専用とし、本リポジトリ側から直接の変更は行わない。本ガイドの差分は PR 提案用である。
+This document outlines the proposed loader modifications, PR diff design, and verification procedures for integrating `AstraToolbox_jll` into `AstraToolbox.jl`.
+*Note: `/home/jov/git/prj/AstraToolbox.jl` is a read-only reference repository. No direct edits are performed from this builder repository. All diffs below are prepared for future upstream PR submission.*
 
 ---
 
-## 1. 統合の基本方針
+## 1. Integration Principles
 
-1. **既存 API の完全維持**:
+1. **Complete Public API Preservation**:
    - `LowLevel.set_library!(path)`
    - `LowLevel.library_path()`
    - `LowLevel.has_cuda()`
    - `LowLevel.get_gpu_info()`
    - `LowLevel.last_error()`
-   - public Julia API（`project`, `backproject`, `reconstruct`, `fbp`, `sirt`, etc.）は一切変更しない。
-2. **優先順位契約の維持**:
-   ライブラリ探索の優先順位は以下のように維持・拡張する:
-   1. 環境変数 `ASTRA_JULIA_LIB`（開発者・カスタムビルドの最優先オーバーライド）
-   2. `AstraToolbox_jll.libastra_path`（JLL アーティファクト経由。新規追加）
-   3. `deps/deps.jl` で定義された `libastra`（従来のローカルビルド生成物）
-   4. システムの `"libastra.so"`
-3. **段階的移行**:
-   - 初期段階では既存の `deps/build.jl` を即座に削除せず併存させる。
-   - JLL による読み込みが標準化され、十分な実機検証期間を経た後に `deps/build.jl` を非推奨化・廃止する。
+   - High-level Julia interfaces (`project`, `backproject`, `reconstruct`, `fbp`, `sirt`, etc.) remain 100% unchanged.
+2. **Library Resolution Precedence Contract**:
+   Library resolution precedence is maintained and extended:
+   1. `ENV["ASTRA_JULIA_LIB"]` (Highest priority override for custom/developer builds)
+   2. `AstraToolbox_jll.libastra_path` (JLL artifact path, newly introduced)
+   3. `libastra` from `deps/deps.jl` (Legacy local build output)
+   4. System library `"libastra.so"`
+3. **Phased Migration**:
+   - In the initial integration PR, `deps/build.jl` is preserved alongside JLL loading.
+   - After sufficient community validation, local building will be deprecated in favor of precompiled JLL binaries.
 
 ---
 
-## 2. AstraToolbox.jl への変更案 (PR Diff)
+## 2. Proposed Changes to AstraToolbox.jl (PR Diff)
 
-### 2.1 `src/lowlevel_common.jl` の変更案
+### 2.1 `src/lowlevel_common.jl` Diff
 ```diff
 --- a/src/lowlevel_common.jl
 +++ b/src/lowlevel_common.jl
@@ -54,14 +54,14 @@
  end
 ```
 
-### 2.2 `src/LowLevel.jl` の変更案
+### 2.2 `src/LowLevel.jl` Diff
 ```diff
 --- a/src/LowLevel.jl
 +++ b/src/LowLevel.jl
 @@ -3,6 +3,11 @@ module LowLevel
  using Libdl
  
-+# Optional JLL loader
++# Optional legacy local deps loader
 +@static if isfile(joinpath(@__DIR__, "..", "deps", "deps.jl"))
 +    include(joinpath(@__DIR__, "..", "deps", "deps.jl"))
 +end
@@ -70,13 +70,13 @@
         library_path,
 ```
 
-### 2.3 `Project.toml` の変更案
+### 2.3 `Project.toml` Diff
 ```diff
 --- a/Project.toml
 +++ b/Project.toml
 @@ -7,6 +7,7 @@ authors = ["Koh Hashimoto <koh.hashimoto@gmail.com>", "AstraToolbox contributors
  [deps]
-+AstraToolbox_jll = "..." # UUID to be assigned upon Yggdrasil registration
++AstraToolbox_jll = "..." # UUID assigned upon Yggdrasil registration
  Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
  Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
  LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -92,18 +92,18 @@
 
 ---
 
-## 3. 互換性・回帰テスト手順
+## 3. Regression & Compatibility Testing Procedure
 
-PR 提出時およびマージ後の実機受入テスト手順:
+Verification steps once `AstraToolbox_jll` is published:
 
-1. **環境変数の指定による JLL / Local ビルドの切り替えテスト**:
+1. **Switching Between JLL and Local Build**:
    ```bash
-   # JLL 経由でのテスト
+   # Test using JLL artifact
    julia --startup-file=no --project=. test/runtests.jl
    
-   # ローカルビルド成果物を強制指定したテスト
+   # Test forcing legacy local build via environment variable override
    ASTRA_JULIA_LIB=/home/jov/git/prj/AstraToolbox.jl/deps/usr/lib/libastra.so \
        julia --startup-file=no --project=. test/runtests.jl
    ```
-2. **テストスイートの通過確認**:
-   - `AstraToolbox.jl/test/runtests.jl` の全 1,148 行におよぶ幾何・投影・再構成（CPU および CUDA）テストが双方で同様に PASS することを確認。
+2. **Test Suite Verification**:
+   - Ensure all 1,148 lines of `AstraToolbox.jl/test/runtests.jl` (including 2D/3D CPU and CUDA geometries, projectors, backprojectors, and reconstruction solvers) pass identically under both modes.

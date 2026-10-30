@@ -1,72 +1,71 @@
-# Julia C ABI 契約書 (abi-contract.md)
+# Julia C ABI Contract (abi-contract.md)
 
-本書は `libastra` に組み込まれる Julia 用 C ABI bridge（`include/astra/julia_c_api.h` および `src/julia_c_api.cpp`）の仕様・契約を定義する文書である。
+This document defines the formal specifications, conventions, and contracts for the Julia C ABI bridge (`include/astra/julia_c_api.h` and `src/julia_c_api.cpp`) bundled within `libastra`.
 
 ---
 
-## 1. ABI 基本規約
+## 1. ABI Conventions
 
-### 1.1 リンケージとシンボル可視性
-- 全関数は `extern "C"` リンケージを持ち、C++ 名前マングリングを行わない。
-- シンボルプレフィックスはすべて `astra_julia_` で統一。
-- 合計 114 個の関数が export される。
+### 1.1 Linkage and Symbol Visibility
+- All wrapper functions have `extern "C"` linkage, avoiding C++ name mangling.
+- All exported symbol names are prefixed with `astra_julia_`.
+- Exactly 114 symbols are exported.
 
-### 1.2 メモリモデルと所有権
-- **借用バッファ (Borrowed Buffers)**:
-  - Julia から渡される配列ポインタ（`volume`, `sinogram`, `angles`, `vectors`, `custom_filter` 等）はすべて呼び出し側（Julia）がメモリ所有権を保持する。
-  - C ABI bridge 内で `BorrowedFloat32Memory` を通じて ASTRA の内部データ構造（`CFloat32VolumeData2D`, `CFloat32VolumeData3D` など）へラップし、関数終了時に破棄される。
-  - 呼び出し中にメモリの解放・再割り当ては行われない。呼び出し完了まで Julia 側で GC による回収を防ぐ（Contiguous `Array{Float32}` の参照維持）。
-- **配列レイアウト**:
-  - Julia の標準である 1-based, 列優先（Column-Major）連続メモリ配置を前提とする。
-  - `stride(A, 1) == 1` であることが Julia 側バインディング（`_check_array`）で検証される。
+### 1.2 Memory Model and Ownership
+- **Borrowed Buffers**:
+  - Array pointers passed from Julia (`volume`, `sinogram`, `angles`, `vectors`, `custom_filter`, etc.) remain exclusively owned by the Julia caller.
+  - The C ABI bridge wraps these pointers using `BorrowedFloat32Memory` into internal ASTRA data structures (`CFloat32VolumeData2D`, `CFloat32VolumeData3D`, etc.), which are destroyed upon function return.
+  - No memory allocation or deallocation of caller buffers occurs inside the native layer. Callers must keep contiguous `Array{Float32}` buffers pinned/rooted for the duration of the call.
+- **Array Layout**:
+  - Expects standard Julia 1-based, column-major contiguous memory layouts (`stride(A, 1) == 1`).
   - 2D volume: `(width, height)`
   - 2D sinogram: `(detector_count, angle_count)`
   - 3D volume: `(width, height, depth)`
   - 3D projection: `(detector_col_count, angle_count, detector_row_count)`
-- **データ型**:
-  - 画像データ・投影データ・幾何パラメータ・フィルタはすべて単精度浮動小数点（`Float32` / `float`）。
-  - インデックス・寸法・反復回数などは `Cint`（`int` / `int32_t`）。
-  - 疎行列のインデックスは `uint32_t*` (列インデックス) および `uint64_t*` (行開始オフセット)。
+- **Data Types**:
+  - Image, projection data, geometric parameters, and filters use single-precision floating point (`Float32` / `float`).
+  - Dimensions, iteration counts, and indices use `Cint` (`int` / `int32_t`).
+  - Sparse matrix representations use `uint32_t*` (column indices) and `uint64_t*` (row start offsets).
 
-### 1.3 エラー処理規約
-- **関数の戻り値**:
-  - `int` 型を返す関数の多くは、成功時に `1`、失敗時に `0` を返す。
-  - 診断・問合せ系関数（`has_cuda`, `get_gpu_count`, `get_gpu_index` 等）は状態または値を返す。
-- **エラー情報の取得**:
-  - C++ 側の例外は C ABI 境界を越えて漏出せず、`try { ... } catch (const std::exception& e)` によって捕捉される。
-  - 捕捉されたエラー文字列はスレッドローカル変数に記録される。
-  - Julia 側は失敗時（戻り値 0）に `const char* astra_julia_last_error()` を呼び出してメッセージを取得し、Julia 例外を送出する。
+### 1.3 Error Handling Contract
+- **Return Codes**:
+  - Functions returning `int` return `1` on success and `0` on failure.
+  - Diagnostic functions (`has_cuda`, `get_gpu_count`, `get_gpu_index`, etc.) return values directly.
+- **Exception Interception**:
+  - Native C++ exceptions never cross the C ABI boundary; all top-level functions contain `try { ... } catch (const std::exception& e)` guards.
+  - Caught error messages are stored in thread-local memory.
+  - Julia bindings inspect `const char* astra_julia_last_error()` on failure (`0`) and raise corresponding Julia exceptions.
 
 ---
 
-## 2. Export される全 114 シンボル一覧
+## 2. Complete Catalog of 114 Exported Symbols
 
-### 2.1 ユーティリティ・診断・環境設定 (10 関数)
-| シンボル名 | 説明 |
+### 2.1 Diagnostics, Configuration & Utilities (10 functions)
+| Symbol Name | Description |
 | :--- | :--- |
-| `astra_julia_has_cuda` | CUDA サポートが有効化されてビルドされているか (1/0) |
-| `astra_julia_has_feature` | 指定された機能文字列が有効か |
-| `astra_julia_get_gpu_count` | 認識されている NVIDIA GPU 数 |
-| `astra_julia_get_gpu_info` | 指定 GPU の名前・メモリ等の情報取得 |
-| `astra_julia_set_gpu_index` | 使用する GPU インデックスの設定 |
-| `astra_julia_get_gpu_index` | 現在設定されている GPU インデックスの取得 |
-| `astra_julia_last_error` | 直前のエラーメッセージ文字列（スレッドローカル）取得 |
-| `astra_julia_project_point_3d` | 3D 幾何において 3 次元座標を検出器平面へ投影 |
-| `astra_julia_projected_bbox_3d` | 3D バウンディングボックスの投影領域計算 |
-| `astra_julia_cuda_roi_select_2d_f32` | 2D ROI 選択マスクの抽出 |
+| `astra_julia_has_cuda` | Returns 1 if CUDA support was compiled in, 0 otherwise |
+| `astra_julia_has_feature` | Checks if a named feature string is supported |
+| `astra_julia_get_gpu_count` | Returns the number of detected NVIDIA GPUs |
+| `astra_julia_get_gpu_info` | Queries GPU name, memory, and architecture information |
+| `astra_julia_set_gpu_index` | Sets active CUDA GPU index |
+| `astra_julia_get_gpu_index` | Gets currently configured CUDA GPU index |
+| `astra_julia_last_error` | Returns the last thread-local error message string |
+| `astra_julia_project_point_3d` | Projects a 3D coordinate onto detector plane |
+| `astra_julia_projected_bbox_3d` | Computes detector bounding box of a 3D volume |
+| `astra_julia_cuda_roi_select_2d_f32` | Extracts 2D ROI selection mask |
 
-### 2.2 ボリュームウィンドウ設定 (6 関数)
-| シンボル名 | 説明 |
+### 2.2 Volume Window Configuration (6 functions)
+| Symbol Name | Description |
 | :--- | :--- |
-| `astra_julia_set_volume_window_2d` | 2D 再構成領域のウィンドウ（window min/max）設定 |
-| `astra_julia_clear_volume_window_2d` | 2D ボリュームウィンドウのクリア（全体に戻す） |
-| `astra_julia_get_volume_window_2d` | 2D ボリュームウィンドウの現在値取得 |
-| `astra_julia_set_volume_window_3d` | 3D 再構成領域のウィンドウ設定 |
-| `astra_julia_clear_volume_window_3d` | 3D ボリュームウィンドウのクリア |
-| `astra_julia_get_volume_window_3d` | 3D ボリュームウィンドウの現在値取得 |
+| `astra_julia_set_volume_window_2d` | Sets 2D volume reconstruction window (min/max bounds) |
+| `astra_julia_clear_volume_window_2d` | Clears 2D volume window (resets to full volume) |
+| `astra_julia_get_volume_window_2d` | Retrieves current 2D volume window coordinates |
+| `astra_julia_set_volume_window_3d` | Sets 3D volume reconstruction window |
+| `astra_julia_clear_volume_window_3d` | Clears 3D volume window |
+| `astra_julia_get_volume_window_3d` | Retrieves current 3D volume window coordinates |
 
-### 2.3 2D CPU プロジェクションおよび再構成 (42 関数)
-| カテゴリ | シンボル名 |
+### 2.3 2D CPU Projection & Reconstruction (42 functions)
+| Category | Symbol Names |
 | :--- | :--- |
 | **Parallel FP** | `astra_julia_fp2d_parallel_line_f32`, `astra_julia_fp2d_parallel_vec_line_f32`, `astra_julia_fp2d_parallel_linear_f32`, `astra_julia_fp2d_parallel_vec_linear_f32`, `astra_julia_fp2d_parallel_strip_f32`, `astra_julia_fp2d_parallel_vec_strip_f32`, `astra_julia_fp2d_parallel_distance_driven_f32`, `astra_julia_fp2d_parallel_vec_distance_driven_f32` |
 | **Parallel BP** | `astra_julia_bp2d_parallel_line_f32`, `astra_julia_bp2d_parallel_vec_line_f32`, `astra_julia_bp2d_parallel_linear_f32`, `astra_julia_bp2d_parallel_vec_linear_f32`, `astra_julia_bp2d_parallel_strip_f32`, `astra_julia_bp2d_parallel_vec_strip_f32`, `astra_julia_bp2d_parallel_distance_driven_f32`, `astra_julia_bp2d_parallel_vec_distance_driven_f32` |
@@ -79,8 +78,8 @@
 | **ART** | `astra_julia_art2d_parallel_f32`, `astra_julia_art2d_parallel_vec_f32`, `astra_julia_art2d_fanflat_f32`, `astra_julia_art2d_fanflat_vec_f32` |
 | **Sparse Matrix** | `astra_julia_fp2d_sparse_matrix_f32`, `astra_julia_bp2d_sparse_matrix_f32`, `astra_julia_sirt2d_sparse_matrix_f32`, `astra_julia_sart2d_sparse_matrix_f32`, `astra_julia_cgls2d_sparse_matrix_f32`, `astra_julia_art2d_sparse_matrix_f32` |
 
-### 2.4 2D CUDA プロジェクションおよび再構成 (24 関数)
-| カテゴリ | シンボル名 |
+### 2.4 2D CUDA Projection & Reconstruction (24 functions)
+| Category | Symbol Names |
 | :--- | :--- |
 | **CUDA FP** | `astra_julia_cuda_fp2d_parallel_line_f32`, `astra_julia_cuda_fp2d_parallel_vec_f32`, `astra_julia_cuda_fp2d_fanflat_f32`, `astra_julia_cuda_fp2d_fanflat_vec_f32` |
 | **CUDA BP** | `astra_julia_cuda_bp2d_parallel_f32`, `astra_julia_cuda_bp2d_parallel_vec_f32`, `astra_julia_cuda_bp2d_fanflat_f32`, `astra_julia_cuda_bp2d_fanflat_vec_f32` |
@@ -91,8 +90,8 @@
 | **CUDA EM** | `astra_julia_cuda_em2d_parallel_f32` |
 | **CUDA DART** | `astra_julia_cuda_dart_mask_2d_f32`, `astra_julia_cuda_dart_smoothing_2d_f32` |
 
-### 2.5 3D CUDA プロジェクションおよび再構成 (32 関数)
-| カテゴリ | シンボル名 |
+### 2.5 3D CUDA Projection & Reconstruction (32 functions)
+| Category | Symbol Names |
 | :--- | :--- |
 | **CUDA 3D FP** | `astra_julia_cuda_fp3d_parallel_f32`, `astra_julia_cuda_fp3d_parallel_vec_f32`, `astra_julia_cuda_fp3d_cone_f32`, `astra_julia_cuda_fp3d_cone_vec_f32`, `astra_julia_cuda_fp3d_cyl_cone_vec_f32` |
 | **CUDA 3D BP** | `astra_julia_cuda_bp3d_parallel_f32`, `astra_julia_cuda_bp3d_parallel_vec_f32`, `astra_julia_cuda_bp3d_cone_f32`, `astra_julia_cuda_bp3d_cone_vec_f32`, `astra_julia_cuda_bp3d_cyl_cone_vec_f32` |
@@ -104,11 +103,11 @@
 
 ---
 
-## 3. 受入・互換性テスト基準
+## 3. Acceptance & Verification Gates
 
-1. **シンボル完全一致**:
-   - `nm -D --defined-only libastra.so | grep " astra_julia_"` の出力が上記 114 個と完全に一致すること。
-2. **C++ ABI 整合性**:
-   - GCC 12 / C++17 でビルドされ、glibc 2.17+ / C++11 standard library ABI と整合すること。
-3. **数値同一性**:
-   - 同じ入力データに対し、現行の `deps/build.jl` でビルドされた `libastra.so` と JLL 版 `libastra.so` が計算機誤差（GPU 非決定性や浮動小数点丸め誤差の許容範囲内、相対誤差 $< 10^{-5}$）で同一の結果を返すこと。
+1. **Symbol Parity Gate**:
+   - `nm -D --defined-only libastra.so | grep " astra_julia_"` output must exactly match the 114 symbols listed above.
+2. **C++ ABI Compatibility Gate**:
+   - Compiled with GCC 10+ / C++17, compatible with glibc 2.17+ and libstdc++ C++11 dual ABI.
+3. **Numerical Equivalence Gate**:
+   - Given identical test inputs, numerical results between legacy local builds and JLL artifacts must match within strict tolerances (relative error $< 10^{-5}$ accounting for GPU floating-point non-determinism).

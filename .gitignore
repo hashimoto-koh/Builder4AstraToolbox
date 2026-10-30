@@ -17,7 +17,6 @@ __pycache__/
 *.log
 
 # Local development files
-/PROMPT.md
 /private/
 /.codex/
 /.vscode/
